@@ -52,7 +52,6 @@ public class Main {
 			System.out.println("Erro de entrada saída");
 		}
 
-
 		// TODO Auto-generated method stub
 		// URL e base de datos a cal nos conectamos
 		String url = new String(configuracion.getDbconnection().getAddress());
@@ -85,114 +84,181 @@ public class Main {
 			// Executamos a sentencia SQL anterior
 			createFunction = conn.prepareCall(sqlTableCreation1);
 			createFunction.execute();
-			createFunction.close();  
-			
-			
-			File directorio = new File(configuracion.getApp().getDirectory());
-			String raiz=directorio.getParent()+directorio.getName();
-			String punto=raiz.replace(raiz,".");
+			createFunction.close();
 
-	
-			
-			recorrer(directorio, conn,raiz);
-			
-			//Cerramos a conexión coa base de datos
-			if(conn!=null) conn.close();
+			File directorio = new File(configuracion.getApp().getDirectory());
+			String raiz = directorio.getParent() + directorio.getName();
+			String punto = raiz.replace(raiz, ".");
+
+			recorrer(directorio, conn, raiz);
+
+			// Cerramos a conexión coa base de datos
+			if (conn != null)
+				conn.close();
 
 		} catch (SQLException ex) {
 			System.err.println("Error: " + ex.toString());
 		}
 
 	}
-	
-	
 
-	private static void recorrer(File fichero, Connection conn,String raiz) {
+	private static void recorrer(File fichero, Connection conn, String raiz) {
 		if (fichero.isFile()) {
+			int idDirectorio = idDirectorio(conn, fichero.getParent(), raiz);
+			String nomeFicheiro = fichero.getName();
 
-			FileInputStream fis;
-			try {
-				fis = new FileInputStream(fichero);
+			if (!(igualNomeArquivo(conn, nomeFicheiro) && igualIdDirectorio(conn, idDirectorio))) {
 
-				// Creamos a consulta que inserta  na base de datos
-				String sqlInsert = new String("INSERT INTO arquivo(nombre,idDirectorio,binario) VALUES (?,?,?);");
-				PreparedStatement ps;
-				ps = conn.prepareStatement(sqlInsert);
+				FileInputStream fis;
+				try {
+					fis = new FileInputStream(fichero);
 
-				// Engadimos como primeiro parámetro o nome do arquivo
-				ps.setString(1, fichero.getName());
-				// Engadimos como segundo parámetro o directorio
-				ps.setInt(2, idDirectorio(conn,fichero.getParent(),raiz));
-				// Engadimos como terceiro parametro o arquivo binario
-				ps.setBinaryStream(3, fis, (int)fichero.length());
-				// Executamos a consulta
-				ps.executeUpdate();
-				// Cerrramos a consulta e o arquivo aberto
-				ps.close();
+					// Creamos a consulta que inserta na base de datos
+					String sqlInsert = new String("INSERT INTO arquivo(nombre,idDirectorio,binario) VALUES (?,?,?);");
+					PreparedStatement ps;
+					ps = conn.prepareStatement(sqlInsert);
 
-				fis.close();
+					// Engadimos como primeiro parámetro o nome do arquivo
+					ps.setString(1, nomeFicheiro);
+					// Engadimos como segundo parámetro o directorio
+					ps.setInt(2, idDirectorio);
+					// Engadimos como terceiro parametro o arquivo binario
+					ps.setBinaryStream(3, fis, (int) fichero.length());
+					// Executamos a consulta
+					ps.executeUpdate();
+					// Cerrramos a consulta e o arquivo aberto
+					ps.close();
 
-			} catch (FileNotFoundException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} catch (SQLException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+					fis.close();
+
+				} catch (FileNotFoundException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (SQLException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 			}
 
 		}
 
-		if (fichero.isDirectory() ) {
+		if (fichero.isDirectory()) {
 			try {
-				String path=fichero.getPath();
-				String nome=path.replace(raiz,".");
+				String path = fichero.getPath();
+				String nome = path.replace(raiz, ".");
 
-				// Creamos a consulta que inserta o directorio na base de datos
-				String sqlInsert = new String("INSERT INTO directorio(nome) VALUES (?);");
-				PreparedStatement ps;
-				ps = conn.prepareStatement(sqlInsert);
+				if (!igualNomeDirectorio(conn, nome)) {
 
-				// Engadimos como primeiro parámetro o nome do arquivo
-				ps.setString(1, nome);
-				// Executamos a consulta
-				ps.executeUpdate();
-				// Cerrramos a consulta e o arquivo  aberto
-				ps.close();
-			}catch (SQLException e) {
+					// Creamos a consulta que inserta o directorio na base de datos
+					String sqlInsert = new String("INSERT INTO directorio(nome) VALUES (?);");
+					PreparedStatement ps;
+					ps = conn.prepareStatement(sqlInsert);
+
+					// Engadimos como primeiro parámetro o nome do arquivo
+					ps.setString(1, nome);
+					// Executamos a consulta
+					ps.executeUpdate();
+					// Cerrramos a consulta e o arquivo aberto
+					ps.close();
+				}
+			} catch (SQLException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 
-
 			for (File ficheroHijo : fichero.listFiles()) {
-				recorrer(ficheroHijo, conn,raiz);
+				recorrer(ficheroHijo, conn, raiz);
 			}
 
 		}
 
 	}
-	
-	public static int idDirectorio(Connection conn,String directorio,String raiz) {
-		int id=0;
-		String nome=directorio.replace(raiz,".");
-		 PreparedStatement stmt;
+
+	public static int idDirectorio(Connection conn, String directorio, String raiz) {
+		int id = 0;
+		String nome = directorio.replace(raiz, ".");
+		PreparedStatement stmt;
 		try {
 			stmt = conn.prepareStatement("SELECT id FROM directorio WHERE nome = ?");
-			stmt.setString(1,nome);
+			stmt.setString(1, nome);
 			ResultSet rs = stmt.executeQuery();
-			if (rs.next()) { //Para leer varias posibles filas se cambia el while por el if
-	            id = rs.getInt("id");
-	        };
+			if (rs.next()) { // Para leer varias posibles filas se cambia el while por el if
+				id = rs.getInt("id");
+			}
+			;
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		return id;
 	}
-	
 
+	public static boolean igualNomeDirectorio(Connection conn, String nome) {
+		boolean existe = false;
+		PreparedStatement stmt;
+		try {
+			stmt = conn.prepareStatement("SELECT nome FROM directorio");
+			ResultSet rs = stmt.executeQuery();
+			while (rs.next()) {
+				if (rs.getString("nome").equals(nome)) {
+					System.out.println(rs.getString("nome")+" igual a ");
+					System.out.println(nome);
+					existe = true;
+				}
+			}
+			rs.close();
+			stmt.close();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		System.out.println("existe nome directorio:"+existe);
+		return existe;
+	}
+	
+	public static boolean igualNomeArquivo(Connection conn, String nome) {
+		boolean existe = false;
+		PreparedStatement stmt;
+		try {
+			stmt = conn.prepareStatement("SELECT nombre FROM arquivo");
+			ResultSet rs = stmt.executeQuery();
+			while (rs.next()) {
+				if (rs.getString("nombre").equals(nome)) {
+					existe = true;
+				}
+			}
+			rs.close();
+			stmt.close();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		System.out.println("existe nomearquivo:"+existe);
+		return existe;
+	}
+
+	public static boolean igualIdDirectorio(Connection conn, int id) {
+		boolean existe = false;
+		PreparedStatement stmt;
+		try {
+			stmt = conn.prepareStatement("SELECT id FROM arquivo");
+			ResultSet rs = stmt.executeQuery();
+			while (rs.next()) {
+				if (rs.getInt("id") == id) {
+					existe = true;
+				}
+			}
+			rs.close();
+			stmt.close();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		System.out.println("existe id directorio:"+existe);
+		return existe;
+	}
 
 }
