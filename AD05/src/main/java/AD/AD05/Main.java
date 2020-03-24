@@ -1,11 +1,15 @@
 package AD.AD05;
 
+
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -91,6 +95,8 @@ public class Main {
 			String punto = raiz.replace(raiz, ".");
 
 			recorrer(directorio, conn, raiz);
+			getNomeDirectorios(directorio, conn, raiz);
+			getArquivos(directorio, conn, raiz);
 
 			// Cerramos a conexión coa base de datos
 			if (conn != null)
@@ -102,12 +108,17 @@ public class Main {
 
 	}
 
+	///////////////////////////////////////////////////////////////
+
 	private static void recorrer(File fichero, Connection conn, String raiz) {
 		if (fichero.isFile()) {
+			String path = fichero.getParent();
+			String nomeD = path.replace(raiz, ".");
 			int idDirectorio = idDirectorio(conn, fichero.getParent(), raiz);
-			String nomeFicheiro = fichero.getName();
+			String nomeArquivo = fichero.getName();
+			System.out.println("nome: " + nomeArquivo + " id directorio: " + idDirectorio);
 
-			if (!(igualNomeArquivo(conn, nomeFicheiro) && igualIdDirectorio(conn, idDirectorio))) {
+			if (!existeArquivoDirectorio(conn, nomeArquivo, idDirectorio)) {
 
 				FileInputStream fis;
 				try {
@@ -119,7 +130,7 @@ public class Main {
 					ps = conn.prepareStatement(sqlInsert);
 
 					// Engadimos como primeiro parámetro o nome do arquivo
-					ps.setString(1, nomeFicheiro);
+					ps.setString(1, nomeArquivo);
 					// Engadimos como segundo parámetro o directorio
 					ps.setInt(2, idDirectorio);
 					// Engadimos como terceiro parametro o arquivo binario
@@ -177,6 +188,7 @@ public class Main {
 
 	}
 
+///////////////////////////////////////////////////////////////////////////////////////
 	public static int idDirectorio(Connection conn, String directorio, String raiz) {
 		int id = 0;
 		String nome = directorio.replace(raiz, ".");
@@ -196,6 +208,7 @@ public class Main {
 		return id;
 	}
 
+	//////////////////////////////////////////////////////////////////////////
 	public static boolean igualNomeDirectorio(Connection conn, String nome) {
 		boolean existe = false;
 		PreparedStatement stmt;
@@ -204,8 +217,6 @@ public class Main {
 			ResultSet rs = stmt.executeQuery();
 			while (rs.next()) {
 				if (rs.getString("nome").equals(nome)) {
-					System.out.println(rs.getString("nome")+" igual a ");
-					System.out.println(nome);
 					existe = true;
 				}
 			}
@@ -215,10 +226,12 @@ public class Main {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		System.out.println("existe nome directorio:"+existe);
+
 		return existe;
 	}
-	
+
+	////////////////////////////////////////////////////////////
+
 	public static boolean igualNomeArquivo(Connection conn, String nome) {
 		boolean existe = false;
 		PreparedStatement stmt;
@@ -236,17 +249,21 @@ public class Main {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		System.out.println("existe nomearquivo:"+existe);
+		System.out.println("Existe nome arquivo: " + existe);
 		return existe;
 	}
 
-	public static boolean igualIdDirectorio(Connection conn, int id) {
+	/////////////////////////////////////////////////////////////////////
+
+	public static boolean igualIdDirectorio(Connection conn, int id, String nomeD) {
 		boolean existe = false;
 		PreparedStatement stmt;
 		try {
-			stmt = conn.prepareStatement("SELECT id FROM arquivo");
+			stmt = conn.prepareStatement("SELECT id FROM directorio where nome=?");
+			stmt.setString(1, nomeD);
 			ResultSet rs = stmt.executeQuery();
 			while (rs.next()) {
+				System.out.println("id consulta: " + rs.getInt(1) + " Id: " + id);
 				if (rs.getInt("id") == id) {
 					existe = true;
 				}
@@ -257,7 +274,179 @@ public class Main {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		System.out.println("existe id directorio:"+existe);
+		System.out.println("Existe id directorio: " + existe);
+		return existe;
+	}
+
+	/////////////////////////////////////////////////////////////
+
+	public static void crearFuncion(Connection conn) {
+		// Creamos a sentencia SQL para crear unha función
+		// NOTA: nón é moi lóxico crear funcións dende código. Só o fago para despois
+		// utilizala
+		String sqlCreateFucction = new String("CREATE OR REPLACE FUNCTION inc(val integer) RETURNS integer AS $$ "
+				+ "BEGIN " + "RETURN val + 1; " + "END;" + "$$ LANGUAGE PLPGSQL;");
+		// Executamos a sentencia SQL anterior
+		CallableStatement createFunction;
+		try {
+			createFunction = conn.prepareCall(sqlCreateFucction);
+			createFunction.execute();
+			createFunction.close();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+	}
+
+	/////////////////////////////////////////////////////////////////////
+
+	public static void getNomeDirectorios(File fichero, Connection conn, String raiz) {
+		// Creamos a consulta que inserta na base de datos
+		String sqlInsert = new String("SELECT nome from directorio");
+		PreparedStatement ps;
+		try {
+			ps = conn.prepareStatement(sqlInsert);
+			ResultSet rs = ps.executeQuery();
+			while (rs.next()) {
+				if (!existeDirectorio(fichero, conn, raiz, rs.getString(1))) {
+					File directorio = new File(raiz + "/" + rs.getString(1));
+					directorio.mkdirs();
+				}
+
+			}
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+	}
+
+	///////////////////////////////////////////////
+
+	public static void getArquivos(File fichero, Connection conn, String raiz) {
+
+		// Creamos a consulta que inserta na base de datos
+		String sqlInsert = new String("SELECT nombre,idDirectorio from arquivo");
+		PreparedStatement ps;
+		try {
+			ps = conn.prepareStatement(sqlInsert);
+			ResultSet rs = ps.executeQuery();
+			while (rs.next()) {
+				if (!existeArquivo(fichero, conn, raiz, rs.getString("nombre"), rs.getInt(2))) {
+					byte[] arqBytes = null;
+						arqBytes = rs.getBytes(2);
+
+					String ruta = raiz + nomeDirectorio(rs.getInt(2), conn).substring(1)
+							+ System.getProperty("file.separator") + rs.getString(1);
+					System.out.println(ruta);
+					File file = new File(ruta);
+					FileOutputStream os = new FileOutputStream(file);
+					// Gardamos o arquivo recuperado
+					if (arqBytes != null) {
+						os.write(arqBytes);
+					}
+					// cerramos o fluxo de datos de saida
+					os.close();
+
+
+				}
+			}
+			rs.close();
+			ps.close();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+	}
+
+	///////////////////////////////////////////////
+
+	private static boolean existeDirectorio(File fichero, Connection conn, String raiz, String nome) {
+		boolean existe = false;
+		if (fichero.isDirectory()) {
+			String path = fichero.getPath();
+			String nomeF = path.replace(raiz, ".");
+			if (nomeF.contentEquals(nome)) {
+				existe = true;
+			}
+
+			for (File ficheroHijo : fichero.listFiles()) {
+				existeDirectorio(ficheroHijo, conn, raiz, nome);
+			}
+		}
+		return existe;
+	}
+	//////////////////////////////////////////////////
+
+	private static boolean existeArquivo(File fichero, Connection conn, String raiz, String nome, int idDirectorio) {
+		boolean existe = false;
+		if (fichero.isFile()) {
+			int idDirectorioF = idDirectorio(conn, fichero.getParent(), raiz);
+			String nomeF = fichero.getName();
+			if (nomeF.contentEquals(nome)) {
+				String path = fichero.getPath();
+				String nomeD = path.replace(raiz, ".");
+				if (nomeD.equals(nomeDirectorio(idDirectorio, conn))) {
+					existe = true;
+				}
+			}
+
+			for (File ficheroHijo : fichero.listFiles()) {
+				existeArquivo(ficheroHijo, conn, raiz, nome, idDirectorio);
+			}
+		}
+		System.out.println("Existe: " + existe);
+		return existe;
+	}
+	////////////////////////////////////////////////
+
+	public static String nomeDirectorio(int idDirectorio, Connection conn) {
+		String nome = "";
+		// Creamos a consulta que inserta na base de datos
+		String sqlInsert = new String("SELECT nome from directorio where id=?");
+		PreparedStatement ps;
+		try {
+			ps = conn.prepareStatement(sqlInsert);
+			ps.setInt(1, idDirectorio);
+			ResultSet rs = ps.executeQuery();
+			if (rs.next()) {
+				nome = rs.getString(1);
+
+			}
+
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		return nome;
+
+	}
+	//////////////////////////////////////////////////////
+
+	private static boolean existeArquivoDirectorio(Connection conn, String nomeArquivo, int idDirectorio) {
+		boolean existe = false;
+		String sqlInsert = new String("SELECT nombre,idDirectorio from arquivo");
+		PreparedStatement ps;
+		try {
+			ps = conn.prepareStatement(sqlInsert);
+			ResultSet rs = ps.executeQuery();
+			while (rs.next()) {
+				if (nomeArquivo.equals(rs.getString(1)) && idDirectorio == rs.getInt(2)) {
+					existe = true;
+				}
+
+			}
+
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		System.out.println("Existe: " + existe);
 		return existe;
 	}
 

@@ -2,6 +2,7 @@ package AD.AD05;
 
 
 
+
 public class Configuracion {
 	
 	DbConnection dbConnection;
@@ -37,3 +38,4 @@ public class Configuracion {
 	
 
 }
+
