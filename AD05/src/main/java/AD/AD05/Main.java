@@ -1,7 +1,5 @@
 package AD.AD05;
 
-
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -16,7 +14,12 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Date;
 import java.util.Properties;
+
+import org.postgresql.PGConnection;
+import org.postgresql.PGNotification;
 
 import com.google.gson.Gson;
 
@@ -24,8 +27,15 @@ public class Main {
 
 	public static void main(String[] args) {
 
+		// Tempo en minutos que estara a espera
+		Integer tempo = 1;
+
+		// Tempo que espera para cada consulta en milisegundos
+		Integer espera = 1000;
+
 		Configuracion configuracion = new Configuracion();
 		File arquivoConf = new File("configuracion.json");
+
 		try {
 			// Creamos un fluxo de entrada para o arquivo
 			FileReader fluxoDatos;
@@ -71,15 +81,20 @@ public class Main {
 
 		// Conectamos a base de datos
 		try {
+			
+
 			Connection conn = DriverManager.getConnection(postgres, props);
-			System.out.println("Conectado");
+			Notifier notifier = new Notifier(conn);
+
+			notifier.start();
+
 			// Creamos a táboa directorio
 			String sqlTableCreation = new String(
 					"CREATE TABLE IF NOT EXISTS directorio (id serial primary key, nome text not null);");
 			// Executamos a sentencia SQL anterior
 			CallableStatement createFunction = conn.prepareCall(sqlTableCreation);
 			createFunction.execute();
-			System.out.println("tabla creada");
+			//System.out.println("tabla creada");
 			// createFunction.close();
 
 			// Creamos a táboa arquivo
@@ -90,33 +105,81 @@ public class Main {
 			createFunction.execute();
 			createFunction.close();
 
+			crearFuncion(conn);
+/*/
+			PGConnection pgconn = conn.unwrap(PGConnection.class);
+			Statement stmt = conn.createStatement();
+			stmt.execute("LISTEN novoArquivo");
+			stmt.close();
+			System.out.println("Esperando novos arquivos...");
+
+			// Variables para controlar o tempo de espera
+			boolean flag = false;
+			long finishAt = new Date().getTime() + (tempo * 60000);
+
+			// Creamos a consulta que necesitaremos para obter a mensaxe
+			PreparedStatement sqlMensaxe = conn.prepareStatement("SELECT nombre FROM arquivo WHERE id=?;");
+			// Bucle para ir lendo as mensaxes
+			while (flag) {
+
+				PGNotification notifications[] = pgconn.getNotifications();
+				if (notifications != null) {
+					for (int i = 0; i < notifications.length; i++) {
+						int id = Integer.parseInt(notifications[i].getParameter());
+						sqlMensaxe.setInt(1, id);
+						ResultSet rs = sqlMensaxe.executeQuery();
+						rs.next();
+						System.out.println(rs.getString(1) + ":" + rs.getString(2));
+						rs.close();
+					}
+				}
+			}
+			
+			*/
+			
+			
 			File directorio = new File(configuracion.getApp().getDirectory());
 			String raiz = directorio.getParent() + directorio.getName();
 			String punto = raiz.replace(raiz, ".");
+			
+			
+
 
 			recorrer(directorio, conn, raiz);
 			getNomeDirectorios(directorio, conn, raiz);
 			getArquivos(directorio, conn, raiz);
+			
+			Connection Lconn = DriverManager.getConnection(postgres, props);
+			Listener listener = new Listener(Lconn,directorio,raiz);
+			listener.start();
+			
+			Connection Ltconn = DriverManager.getConnection(postgres, props);
+			Listen listen = new Listen(Ltconn,directorio,raiz);
+			listen.start();
 
 			// Cerramos a conexión coa base de datos
-			if (conn != null)
-				conn.close();
+
+			// if (conn != null)
+			// conn.close();
 
 		} catch (SQLException ex) {
 			System.err.println("Error: " + ex.toString());
 		}
+		
 
-	}
+
+	}// fin do metodo main
 
 	///////////////////////////////////////////////////////////////
 
-	private static void recorrer(File fichero, Connection conn, String raiz) {
+	static void recorrer(File fichero, Connection conn, String raiz) {
 		if (fichero.isFile()) {
+			// System.out.println(fichero.getAbsolutePath());
 			String path = fichero.getParent();
 			String nomeD = path.replace(raiz, ".");
 			int idDirectorio = idDirectorio(conn, fichero.getParent(), raiz);
 			String nomeArquivo = fichero.getName();
-			System.out.println("nome: " + nomeArquivo + " id directorio: " + idDirectorio);
+			//System.out.println("nome: " + nomeArquivo + " id directorio: " + idDirectorio);
 
 			if (!existeArquivoDirectorio(conn, nomeArquivo, idDirectorio)) {
 
@@ -141,7 +204,7 @@ public class Main {
 					ps.close();
 
 					fis.close();
-
+					System.out.println("Novo arquivo añadido");
 				} catch (FileNotFoundException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -249,7 +312,7 @@ public class Main {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		System.out.println("Existe nome arquivo: " + existe);
+		//System.out.println("Existe nome arquivo: " + existe);
 		return existe;
 	}
 
@@ -263,7 +326,7 @@ public class Main {
 			stmt.setString(1, nomeD);
 			ResultSet rs = stmt.executeQuery();
 			while (rs.next()) {
-				System.out.println("id consulta: " + rs.getInt(1) + " Id: " + id);
+				//System.out.println("id consulta: " + rs.getInt(1) + " Id: " + id);
 				if (rs.getInt("id") == id) {
 					existe = true;
 				}
@@ -281,17 +344,28 @@ public class Main {
 	/////////////////////////////////////////////////////////////
 
 	public static void crearFuncion(Connection conn) {
-		// Creamos a sentencia SQL para crear unha función
-		// NOTA: nón é moi lóxico crear funcións dende código. Só o fago para despois
-		// utilizala
-		String sqlCreateFucction = new String("CREATE OR REPLACE FUNCTION inc(val integer) RETURNS integer AS $$ "
-				+ "BEGIN " + "RETURN val + 1; " + "END;" + "$$ LANGUAGE PLPGSQL;");
-		// Executamos a sentencia SQL anterior
+		String sqlCreateFunction = new String("CREATE OR REPLACE FUNCTION notificar_novoArquivo() "
+				+ "RETURNS trigger AS $$ " + "BEGIN " + "PERFORM pg_notify('novamensaxe',NEW.id::text); "
+				+ "RETURN NEW; " + "END; " + "$$ LANGUAGE plpgsql; ");
+
 		CallableStatement createFunction;
 		try {
-			createFunction = conn.prepareCall(sqlCreateFucction);
+			createFunction = conn.prepareCall(sqlCreateFunction);
 			createFunction.execute();
 			createFunction.close();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		String sqlCreateTrigger = new String("DROP TRIGGER IF EXISTS not_novo_arquivo ON arquivo; "
+				+ "CREATE TRIGGER not_novo_arquivo " + "AFTER INSERT " + "ON arquivo " + "FOR EACH ROW "
+				+ "EXECUTE PROCEDURE notificar_novoArquivo(); ");
+		CallableStatement createTrigger;
+		try {
+			createTrigger = conn.prepareCall(sqlCreateTrigger);
+			createTrigger.execute();
+			createTrigger.close();
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -309,7 +383,13 @@ public class Main {
 			ps = conn.prepareStatement(sqlInsert);
 			ResultSet rs = ps.executeQuery();
 			while (rs.next()) {
-				if (!existeDirectorio(fichero, conn, raiz, rs.getString(1))) {
+				// String path = fichero.getPath();
+				// String nomeF = path.replace(raiz, ".");
+				//System.out.println("nome: " + rs.getString(1));
+				String nome = rs.getString(1);
+				Existe existe = new Existe();
+				if (!recorreD(fichero, conn, raiz, nome, existe)) {
+					System.out.println("No existe, crear directorio");
 					File directorio = new File(raiz + "/" + rs.getString(1));
 					directorio.mkdirs();
 				}
@@ -324,31 +404,38 @@ public class Main {
 
 	///////////////////////////////////////////////
 
-	public static void getArquivos(File fichero, Connection conn, String raiz) {
-
+	public static void getArquivos(File directorio, Connection conn, String raiz) {
 		// Creamos a consulta que inserta na base de datos
-		String sqlInsert = new String("SELECT nombre,idDirectorio from arquivo");
+		String sqlInsert = new String("SELECT nombre,idDirectorio,binario from arquivo");
 		PreparedStatement ps;
 		try {
 			ps = conn.prepareStatement(sqlInsert);
 			ResultSet rs = ps.executeQuery();
 			while (rs.next()) {
-				if (!existeArquivo(fichero, conn, raiz, rs.getString("nombre"), rs.getInt(2))) {
-					byte[] arqBytes = null;
-						arqBytes = rs.getBytes(2);
+				Existe existe = new Existe();
+				String nome = rs.getString("nombre");
+				int id = rs.getInt(2);
+				//System.out.println("nome: " + nome + " Id: " + id);
+				byte[] arqBytes = null;
+				if (!existeArquivo(directorio, conn, raiz, nome, id, existe)) {
+					//System.out.println("non existe arquivo, crear");
+
+					arqBytes = rs.getBytes(3);
 
 					String ruta = raiz + nomeDirectorio(rs.getInt(2), conn).substring(1)
 							+ System.getProperty("file.separator") + rs.getString(1);
-					System.out.println(ruta);
-					File file = new File(ruta);
-					FileOutputStream os = new FileOutputStream(file);
+					// Creamos o fluxo de datos para gardar o arquivo recuperado
+					String ficheiroSaida = new String(ruta);
+					File fileOut = new File(ficheiroSaida);
+					FileOutputStream fluxoDatos = new FileOutputStream(fileOut);
+
 					// Gardamos o arquivo recuperado
 					if (arqBytes != null) {
-						os.write(arqBytes);
+						fluxoDatos.write(arqBytes);
 					}
-					// cerramos o fluxo de datos de saida
-					os.close();
 
+					// cerramos o fluxo de datos de saida
+					fluxoDatos.close();
 
 				}
 			}
@@ -363,44 +450,33 @@ public class Main {
 
 	}
 
-	///////////////////////////////////////////////
-
-	private static boolean existeDirectorio(File fichero, Connection conn, String raiz, String nome) {
-		boolean existe = false;
-		if (fichero.isDirectory()) {
-			String path = fichero.getPath();
-			String nomeF = path.replace(raiz, ".");
-			if (nomeF.contentEquals(nome)) {
-				existe = true;
-			}
-
-			for (File ficheroHijo : fichero.listFiles()) {
-				existeDirectorio(ficheroHijo, conn, raiz, nome);
-			}
-		}
-		return existe;
-	}
 	//////////////////////////////////////////////////
 
-	private static boolean existeArquivo(File fichero, Connection conn, String raiz, String nome, int idDirectorio) {
-		boolean existe = false;
+	static boolean existeArquivo(File fichero, Connection conn, String raiz, String nome, int idDirectorio,
+			Existe existe) {
+		//System.out.println("Entramos en existeArquivo con " + fichero.getAbsolutePath());
 		if (fichero.isFile()) {
 			int idDirectorioF = idDirectorio(conn, fichero.getParent(), raiz);
 			String nomeF = fichero.getName();
-			if (nomeF.contentEquals(nome)) {
-				String path = fichero.getPath();
+			if (nomeF.equals(nome)) {
+				String path = fichero.getParent();
 				String nomeD = path.replace(raiz, ".");
-				if (nomeD.equals(nomeDirectorio(idDirectorio, conn))) {
-					existe = true;
+				String nomeDir = nomeDirectorio(idDirectorio, conn);
+				//System.out.println("nome arquivo igual");
+				//System.out.println("nomeD: " + nomeD + " id: " + idDirectorio + " NomeDir: " + nomeDir);
+				if (nomeD.equals(nomeDir)) {
+					existe.setExiste(true);
 				}
 			}
 
+		}
+		if (fichero.isDirectory()) {
 			for (File ficheroHijo : fichero.listFiles()) {
-				existeArquivo(ficheroHijo, conn, raiz, nome, idDirectorio);
+				existeArquivo(ficheroHijo, conn, raiz, nome, idDirectorio, existe);
 			}
 		}
-		System.out.println("Existe: " + existe);
-		return existe;
+		// System.out.println("Existe arquivo : " + existe.isExiste());
+		return existe.isExiste();
 	}
 	////////////////////////////////////////////////
 
@@ -446,8 +522,98 @@ public class Main {
 			e.printStackTrace();
 		}
 
-		System.out.println("Existe: " + existe);
+		//System.out.println("Existe: " + existe);
 		return existe;
 	}
 
+	////////////////////////////////////////////////////
+	private static boolean recorreD(File fichero, Connection conn, String raiz, String nome, Existe existe) {
+		if (fichero.isDirectory()) {
+			String path = fichero.getPath();
+			String nomeF = path.replace(raiz, ".");
+			// System.out.println("nome: "+nome+" NomeF: "+nomeF);
+			if (nomeF.equals(nome)) {
+				existe.setExiste(true);
+			}
+			for (File ficheroHijo : fichero.listFiles()) {
+				recorreD(ficheroHijo, conn, raiz, nome, existe);
+			}
+
+		}
+		// System.out.println("NomeF: "+nomeF+" nome: "+nome);
+		// System.out.println("Existe directorio: "+existe.isExiste());
+		return existe.isExiste();
+	}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+}// Acaba a clase main
+
+
+/*
+class Listener extends Thread {
+	private Connection conn;
+	private org.postgresql.PGConnection pgconn;
+
+	Listener(Connection conn) throws SQLException {
+		this.conn = conn;
+		this.pgconn = conn.unwrap(org.postgresql.PGConnection.class);
+		Statement stmt = conn.createStatement();
+		stmt.execute("LISTEN mymessage");
+		stmt.close();
+	}
+
+	public void run() {
+		try {
+			while (true) {
+				org.postgresql.PGNotification notifications[] = pgconn.getNotifications();
+
+				// If this thread is the only one that uses the connection, a timeout can be
+				// used to
+				// receive notifications immediately:
+				// org.postgresql.PGNotification notifications[] =
+				// pgconn.getNotifications(10000);
+
+				if (notifications != null) {
+					for (int i = 0; i < notifications.length; i++)
+						System.out.println("Got notification: " + notifications[i].getName());
+				}
+
+				// wait a while before checking again for new
+				// notifications
+
+				Thread.sleep(500);
+			}
+		} catch (SQLException sqle) {
+			sqle.printStackTrace();
+		} catch (InterruptedException ie) {
+			ie.printStackTrace();
+		}
+	}
+}
+
+
+*/
+
+class Notifier extends Thread {
+	private Connection conn;
+
+	public Notifier(Connection conn) {
+		this.conn = conn;
+	}
+
+	public void run() {
+		while (true) {
+			try {
+				Statement stmt = conn.createStatement();
+				stmt.execute("NOTIFY mymessage");
+				stmt.close();
+				Thread.sleep(2000);
+			} catch (SQLException sqle) {
+				sqle.printStackTrace();
+			} catch (InterruptedException ie) {
+				ie.printStackTrace();
+			}
+		}
+	}
 }
