@@ -106,36 +106,8 @@ public class Main {
 			createFunction.close();
 
 			crearFuncion(conn);
-/*/
-			PGConnection pgconn = conn.unwrap(PGConnection.class);
-			Statement stmt = conn.createStatement();
-			stmt.execute("LISTEN novoArquivo");
-			stmt.close();
-			System.out.println("Esperando novos arquivos...");
 
-			// Variables para controlar o tempo de espera
-			boolean flag = false;
-			long finishAt = new Date().getTime() + (tempo * 60000);
-
-			// Creamos a consulta que necesitaremos para obter a mensaxe
-			PreparedStatement sqlMensaxe = conn.prepareStatement("SELECT nombre FROM arquivo WHERE id=?;");
-			// Bucle para ir lendo as mensaxes
-			while (flag) {
-
-				PGNotification notifications[] = pgconn.getNotifications();
-				if (notifications != null) {
-					for (int i = 0; i < notifications.length; i++) {
-						int id = Integer.parseInt(notifications[i].getParameter());
-						sqlMensaxe.setInt(1, id);
-						ResultSet rs = sqlMensaxe.executeQuery();
-						rs.next();
-						System.out.println(rs.getString(1) + ":" + rs.getString(2));
-						rs.close();
-					}
-				}
-			}
-			
-			*/
+	
 			
 			
 			File directorio = new File(configuracion.getApp().getDirectory());
