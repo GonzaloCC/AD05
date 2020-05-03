@@ -81,12 +81,9 @@ public class Main {
 
 		// Conectamos a base de datos
 		try {
-			
 
 			Connection conn = DriverManager.getConnection(postgres, props);
-			Notifier notifier = new Notifier(conn);
-
-			notifier.start();
+		
 
 			// Creamos a táboa directorio
 			String sqlTableCreation = new String(
@@ -94,7 +91,7 @@ public class Main {
 			// Executamos a sentencia SQL anterior
 			CallableStatement createFunction = conn.prepareCall(sqlTableCreation);
 			createFunction.execute();
-			//System.out.println("tabla creada");
+			// System.out.println("tabla creada");
 			// createFunction.close();
 
 			// Creamos a táboa arquivo
@@ -107,38 +104,30 @@ public class Main {
 
 			crearFuncion(conn);
 
-	
-			
-			
 			File directorio = new File(configuracion.getApp().getDirectory());
 			String raiz = directorio.getParent() + directorio.getName();
 			String punto = raiz.replace(raiz, ".");
-			
-			
-
 
 			recorrer(directorio, conn, raiz);
 			getNomeDirectorios(directorio, conn, raiz);
 			getArquivos(directorio, conn, raiz);
-			
+
 			Connection Lconn = DriverManager.getConnection(postgres, props);
-			Listener listener = new Listener(Lconn,directorio,raiz);
+			Listener listener = new Listener(Lconn, directorio, raiz);
 			listener.start();
-			
+
 			Connection Ltconn = DriverManager.getConnection(postgres, props);
-			Listen listen = new Listen(Ltconn,directorio,raiz);
+			Listen listen = new Listen(Ltconn, directorio, raiz);
 			listen.start();
 
 			// Cerramos a conexión coa base de datos
 
-			// if (conn != null)
-			// conn.close();
+			if (conn != null)
+				conn.close();
 
 		} catch (SQLException ex) {
 			System.err.println("Error: " + ex.toString());
 		}
-		
-
 
 	}// fin do metodo main
 
@@ -146,12 +135,12 @@ public class Main {
 
 	static void recorrer(File fichero, Connection conn, String raiz) {
 		if (fichero.isFile()) {
-			// System.out.println(fichero.getAbsolutePath());
+			
 			String path = fichero.getParent();
 			String nomeD = path.replace(raiz, ".");
 			int idDirectorio = idDirectorio(conn, fichero.getParent(), raiz);
 			String nomeArquivo = fichero.getName();
-			//System.out.println("nome: " + nomeArquivo + " id directorio: " + idDirectorio);
+			
 
 			if (!existeArquivoDirectorio(conn, nomeArquivo, idDirectorio)) {
 
@@ -232,7 +221,7 @@ public class Main {
 			stmt = conn.prepareStatement("SELECT id FROM directorio WHERE nome = ?");
 			stmt.setString(1, nome);
 			ResultSet rs = stmt.executeQuery();
-			if (rs.next()) { // Para leer varias posibles filas se cambia el while por el if
+			if (rs.next()) { 
 				id = rs.getInt("id");
 			}
 			;
@@ -284,7 +273,7 @@ public class Main {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		//System.out.println("Existe nome arquivo: " + existe);
+		
 		return existe;
 	}
 
@@ -298,7 +287,7 @@ public class Main {
 			stmt.setString(1, nomeD);
 			ResultSet rs = stmt.executeQuery();
 			while (rs.next()) {
-				//System.out.println("id consulta: " + rs.getInt(1) + " Id: " + id);
+			
 				if (rs.getInt("id") == id) {
 					existe = true;
 				}
@@ -355,9 +344,6 @@ public class Main {
 			ps = conn.prepareStatement(sqlInsert);
 			ResultSet rs = ps.executeQuery();
 			while (rs.next()) {
-				// String path = fichero.getPath();
-				// String nomeF = path.replace(raiz, ".");
-				//System.out.println("nome: " + rs.getString(1));
 				String nome = rs.getString(1);
 				Existe existe = new Existe();
 				if (!recorreD(fichero, conn, raiz, nome, existe)) {
@@ -387,10 +373,10 @@ public class Main {
 				Existe existe = new Existe();
 				String nome = rs.getString("nombre");
 				int id = rs.getInt(2);
-				//System.out.println("nome: " + nome + " Id: " + id);
+				
 				byte[] arqBytes = null;
 				if (!existeArquivo(directorio, conn, raiz, nome, id, existe)) {
-					//System.out.println("non existe arquivo, crear");
+					
 
 					arqBytes = rs.getBytes(3);
 
@@ -426,7 +412,6 @@ public class Main {
 
 	static boolean existeArquivo(File fichero, Connection conn, String raiz, String nome, int idDirectorio,
 			Existe existe) {
-		//System.out.println("Entramos en existeArquivo con " + fichero.getAbsolutePath());
 		if (fichero.isFile()) {
 			int idDirectorioF = idDirectorio(conn, fichero.getParent(), raiz);
 			String nomeF = fichero.getName();
@@ -434,8 +419,6 @@ public class Main {
 				String path = fichero.getParent();
 				String nomeD = path.replace(raiz, ".");
 				String nomeDir = nomeDirectorio(idDirectorio, conn);
-				//System.out.println("nome arquivo igual");
-				//System.out.println("nomeD: " + nomeD + " id: " + idDirectorio + " NomeDir: " + nomeDir);
 				if (nomeD.equals(nomeDir)) {
 					existe.setExiste(true);
 				}
@@ -494,7 +477,7 @@ public class Main {
 			e.printStackTrace();
 		}
 
-		//System.out.println("Existe: " + existe);
+		// System.out.println("Existe: " + existe);
 		return existe;
 	}
 
@@ -521,71 +504,3 @@ public class Main {
 
 }// Acaba a clase main
 
-
-/*
-class Listener extends Thread {
-	private Connection conn;
-	private org.postgresql.PGConnection pgconn;
-
-	Listener(Connection conn) throws SQLException {
-		this.conn = conn;
-		this.pgconn = conn.unwrap(org.postgresql.PGConnection.class);
-		Statement stmt = conn.createStatement();
-		stmt.execute("LISTEN mymessage");
-		stmt.close();
-	}
-
-	public void run() {
-		try {
-			while (true) {
-				org.postgresql.PGNotification notifications[] = pgconn.getNotifications();
-
-				// If this thread is the only one that uses the connection, a timeout can be
-				// used to
-				// receive notifications immediately:
-				// org.postgresql.PGNotification notifications[] =
-				// pgconn.getNotifications(10000);
-
-				if (notifications != null) {
-					for (int i = 0; i < notifications.length; i++)
-						System.out.println("Got notification: " + notifications[i].getName());
-				}
-
-				// wait a while before checking again for new
-				// notifications
-
-				Thread.sleep(500);
-			}
-		} catch (SQLException sqle) {
-			sqle.printStackTrace();
-		} catch (InterruptedException ie) {
-			ie.printStackTrace();
-		}
-	}
-}
-
-
-*/
-
-class Notifier extends Thread {
-	private Connection conn;
-
-	public Notifier(Connection conn) {
-		this.conn = conn;
-	}
-
-	public void run() {
-		while (true) {
-			try {
-				Statement stmt = conn.createStatement();
-				stmt.execute("NOTIFY mymessage");
-				stmt.close();
-				Thread.sleep(2000);
-			} catch (SQLException sqle) {
-				sqle.printStackTrace();
-			} catch (InterruptedException ie) {
-				ie.printStackTrace();
-			}
-		}
-	}
-}

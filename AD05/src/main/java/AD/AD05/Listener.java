@@ -57,9 +57,7 @@ public class Listener extends Thread {
 
 			while (flag) {
 				System.out.println("lendo notificacions");
-				// main.recorrer(directorio, conn, raiz);
-				// main.getNomeDirectorios(directorio, conn, raiz);
-				// main.getArquivos(directorio, conn, raiz);
+
 				PGNotification notifications[] = pgconn.getNotifications();
 				if (notifications != null) {
 					for (int i = 0; i < notifications.length; i++) {
@@ -109,6 +107,13 @@ public class Listener extends Thread {
 					flag = false;
 
 			}
+			// deixamos de escoitar conexións
+			Statement stmt2 = conn.createStatement();
+			stmt2.execute("UNLISTEN novamensaxe");
+			stmt2.close();
+
+			if (conn != null)
+				conn.close();
 
 		} catch (InterruptedException ex) {
 			Logger.getLogger(Listen.class.getName()).log(Level.SEVERE, null, ex);
