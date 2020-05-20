@@ -105,8 +105,9 @@ public class Main {
 			crearFuncion(conn);
 
 			File directorio = new File(configuracion.getApp().getDirectory());
-			String raiz = directorio.getParent() + directorio.getName();
+			String raiz = directorio.getAbsolutePath();
 			String punto = raiz.replace(raiz, ".");
+	
 
 			recorrer(directorio, conn, raiz);
 			getNomeDirectorios(directorio, conn, raiz);
@@ -348,7 +349,7 @@ public class Main {
 				Existe existe = new Existe();
 				if (!recorreD(fichero, conn, raiz, nome, existe)) {
 					System.out.println("No existe, crear directorio");
-					File directorio = new File(raiz + "/" + rs.getString(1));
+					File directorio = new File(raiz + System.getProperty("file.separator")+ rs.getString(1));
 					directorio.mkdirs();
 				}
 
